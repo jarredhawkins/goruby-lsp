@@ -66,29 +66,9 @@ require('lspconfig').goruby_lsp.setup({})
 - **textDocument/references** - Find all usages of a symbol using trigram search
 - **Live reindexing** - File changes are detected via fsnotify and the index updates automatically
 
-## Architecture
-
-### How It Works
-
-1. On startup, walks the project tree and indexes all `.rb` files
-2. Parses Ruby files line-by-line using regex patterns to extract definitions
-3. Builds an in-memory symbol index and trigram index for fast lookups
-4. Watches for file changes and incrementally updates the index
-
-### Supported Ruby Constructs
-
-| Construct | Example |
-|-----------|---------|
-| Classes | `class MyClass`, `class MyModule::MyClass < Base` |
-| Modules | `module MyModule` |
-| Methods | `def my_method`, `def self.class_method` |
-| Constants | `MY_CONST = value` |
-
-The parser uses a plugin system—additional patterns (like `attr_accessor`, Rails DSLs) can be added.
-
 ## Tradeoffs
 
-This project uses **regex-based parsing** rather than a proper AST parser like [tree-sitter](https://tree-sitter.github.io/tree-sitter/). Here's why, and what you give up:
+This project uses **regex-based parsing** rather than a proper AST parser like [tree-sitter](https://tree-sitter.github.io/tree-sitter/) or [prism](https://github.com/ruby/prism).
 
 ### Why Regex?
 
@@ -110,12 +90,36 @@ This project uses **regex-based parsing** rather than a proper AST parser like [
 
 ### When to Use This vs. Solargraph/Ruby LSP
 
+Compared to the Ruby LSP, I've found this trades latency and false negatives, for speed and false positives. 
+I find this generally fits my workflow better than the LSP, but ultimately that tradeoff is up to you.
+
 | Use goruby-lsp when... | Use Solargraph/ruby-lsp when... |
 |------------------------|--------------------------------|
-| You want instant startup | You need accurate type inference |
-| You're on a large monorepo | You need metaprogramming support |
 | You just need "good enough" navigation | You need completion, hover, diagnostics |
 | You want a single binary with no Ruby deps | You don't mind Ruby/gem dependencies |
+| You want instant startup | You need accurate type inference |
+| You're on a large monorepo | You need metaprogramming support |
+
+
+## Architecture
+
+### How It Works
+
+1. On startup, walks the project tree and indexes all `.rb` files
+2. Parses Ruby files line-by-line using regex patterns to extract definitions
+3. Builds an in-memory symbol index and trigram index for fast lookups
+4. Watches for file changes and incrementally updates the index
+
+### Supported Ruby Constructs
+
+| Construct | Example |
+|-----------|---------|
+| Classes | `class MyClass`, `class MyModule::MyClass < Base` |
+| Modules | `module MyModule` |
+| Methods | `def my_method`, `def self.class_method` |
+| Constants | `MY_CONST = value` |
+
+The parser uses a plugin system—additional patterns (like `attr_accessor`, Rails DSLs) can be added.
 
 ## Extending
 
