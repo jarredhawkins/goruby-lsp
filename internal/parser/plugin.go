@@ -6,11 +6,19 @@ import (
 	"github.com/jarredhawkins/goruby-lsp/internal/types"
 )
 
+// MethodContext tracks the current method being parsed
+type MethodContext struct {
+	FullName     string // "MyClass#method_name"
+	StartLine    int    // Line where method definition starts
+	NestingDepth int    // Nesting depth when method started (set by scanner)
+}
+
 // ParseContext provides context for matching
 type ParseContext struct {
-	FilePath     string   // Absolute path of the file being parsed
-	CurrentScope []string // Current namespace stack ["MyModule", "MyClass"]
-	LineNum      int      // Current line number (1-indexed)
+	FilePath      string         // Absolute path of the file being parsed
+	CurrentScope  []string       // Current namespace stack ["MyModule", "MyClass"]
+	LineNum       int            // Current line number (1-indexed)
+	CurrentMethod *MethodContext // Current method being parsed (nil if not in a method)
 }
 
 // MatchResult contains extracted symbol info from a match
@@ -20,6 +28,8 @@ type MatchResult struct {
 	PushScope string
 	// PopScope indicates this match closes a scope (e.g., end keyword)
 	PopScope bool
+	// EnterMethod indicates this match starts a method (set by MethodMatcher)
+	EnterMethod *MethodContext
 }
 
 // Matcher defines how to recognize a Ruby pattern
@@ -71,5 +81,6 @@ func RegisterDefaults(r *Registry) {
 	r.Register(&ModuleMatcher{})
 	r.Register(&MethodMatcher{})
 	r.Register(&ConstantMatcher{})
+	r.Register(&LocalVariableMatcher{})
 	r.Register(&EndMatcher{})
 }

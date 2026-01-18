@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/jarredhawkins/goruby-lsp/internal/parser"
+	"github.com/jarredhawkins/goruby-lsp/internal/types"
 )
 
 // Index provides symbol lookup and text search
@@ -237,6 +238,45 @@ func (idx *Index) FindDefinitionsInFile(name, filePath string) []*Symbol {
 	}
 
 	return append(sameFile, otherFiles...)
+}
+
+// FindLocalVariable finds a local variable definition in the method containing cursorLine.
+// Returns the first matching local variable, or nil if not found.
+func (idx *Index) FindLocalVariable(name, filePath string, cursorLine int) *Symbol {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+
+	syms := idx.byFile[filePath]
+	if syms == nil {
+		return nil
+	}
+
+	// Find the method containing cursorLine
+	var containingMethod *Symbol
+	for _, sym := range syms {
+		if (sym.Kind == types.KindMethod || sym.Kind == types.KindSingletonMethod) &&
+			sym.Line <= cursorLine && sym.EndLine >= cursorLine {
+			containingMethod = sym
+			break
+		}
+	}
+
+	if containingMethod == nil {
+		return nil
+	}
+
+	// Find first local variable with matching name in that method
+	for _, sym := range syms {
+		if sym.Kind == types.KindLocalVariable &&
+			sym.Name == name &&
+			sym.MethodFullName == containingMethod.FullName &&
+			sym.Line > containingMethod.Line &&
+			sym.Line <= containingMethod.EndLine {
+			return sym
+		}
+	}
+
+	return nil
 }
 
 // SymbolsInFile returns all symbols defined in a file

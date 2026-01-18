@@ -14,7 +14,8 @@ const (
 	KindAttrReader
 	KindAttrWriter
 	KindAttrAccessor
-	KindCustom // For plugin-defined symbols
+	KindLocalVariable // Local variable inside a method
+	KindCustom        // For plugin-defined symbols
 )
 
 func (k SymbolKind) String() string {
@@ -35,6 +36,8 @@ func (k SymbolKind) String() string {
 		return "attr_writer"
 	case KindAttrAccessor:
 		return "attr_accessor"
+	case KindLocalVariable:
+		return "local_variable"
 	case KindCustom:
 		return "custom"
 	default:
@@ -44,15 +47,16 @@ func (k SymbolKind) String() string {
 
 // Symbol represents a Ruby definition
 type Symbol struct {
-	Name      string     // e.g., "MyClass", "my_method"
-	Kind      SymbolKind
-	FilePath  string // Absolute path
-	Line      int    // 1-indexed
-	Column    int    // 0-indexed
-	EndLine   int    // For range-based symbols
-	EndColumn int
-	Scope     []string // Enclosing namespaces ["MyModule", "MyClass"]
-	FullName  string   // Computed: "MyModule::MyClass#my_method"
+	Name           string // e.g., "MyClass", "my_method"
+	Kind           SymbolKind
+	FilePath       string // Absolute path
+	Line           int    // 1-indexed
+	Column         int    // 0-indexed
+	EndLine        int    // For range-based symbols
+	EndColumn      int
+	Scope          []string // Enclosing namespaces ["MyModule", "MyClass"]
+	FullName       string   // Computed: "MyModule::MyClass#my_method"
+	MethodFullName string   // For local variables: the containing method's FullName
 }
 
 // ComputeFullName generates the fully qualified name for this symbol
@@ -73,6 +77,12 @@ func (s *Symbol) ComputeFullName() string {
 			return strings.Join(parts, "::") + "." + s.Name
 		}
 		return "." + s.Name
+	case KindLocalVariable:
+		// Local variables use @ after the method name: "MyClass#method@varname"
+		if s.MethodFullName != "" {
+			return s.MethodFullName + "@" + s.Name
+		}
+		return "@" + s.Name
 	default:
 		// Classes, modules, constants use ::
 		parts = append(parts, s.Name)

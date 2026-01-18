@@ -82,7 +82,7 @@ func (t *TrigramIndex) Search(pattern string) []*Reference {
 	}
 
 	// Build word boundary regex for verification
-	wordPattern := regexp.MustCompile(`\b` + regexp.QuoteMeta(pattern) + `\b`)
+	pinfo := buildPatternInfo(pattern)
 
 	var refs []*Reference
 
@@ -93,7 +93,7 @@ func (t *TrigramIndex) Search(pattern string) []*Reference {
 		}
 
 		// Verify matches line by line
-		lineRefs := t.searchInContent(path, content, wordPattern)
+		lineRefs := t.searchInContentWithInfo(path, content, pinfo, len(pattern))
 		refs = append(refs, lineRefs...)
 	}
 
@@ -146,6 +146,11 @@ func (t *TrigramIndex) findCandidates(pattern string) map[string]struct{} {
 
 // searchInContent finds all matches in file content
 func (t *TrigramIndex) searchInContent(path, content string, pattern *regexp.Regexp) []*Reference {
+	return t.searchInContentWithInfo(path, content, patternInfo{regex: pattern, endsWithSpecial: false}, 0)
+}
+
+// searchInContentWithInfo finds all matches with correct length handling for Ruby methods
+func (t *TrigramIndex) searchInContentWithInfo(path, content string, pinfo patternInfo, patternLen int) []*Reference {
 	var refs []*Reference
 
 	scanner := bufio.NewScanner(strings.NewReader(content))
@@ -155,13 +160,18 @@ func (t *TrigramIndex) searchInContent(path, content string, pattern *regexp.Reg
 		lineNum++
 		line := scanner.Text()
 
-		matches := pattern.FindAllStringIndex(line, -1)
+		matches := pinfo.regex.FindAllStringIndex(line, -1)
 		for _, match := range matches {
+			length := match[1] - match[0]
+			// If pattern ends with ? ! =, the regex includes an extra char - use original length
+			if pinfo.endsWithSpecial && patternLen > 0 {
+				length = patternLen
+			}
 			refs = append(refs, &Reference{
 				FilePath: path,
 				Line:     lineNum,
 				Column:   match[0],
-				Length:   match[1] - match[0],
+				Length:   length,
 				LineText: line,
 			})
 		}
@@ -185,6 +195,39 @@ func (t *TrigramIndex) SearchFile(path, pattern string) []*Reference {
 		content = string(data)
 	}
 
-	wordPattern := regexp.MustCompile(`\b` + regexp.QuoteMeta(pattern) + `\b`)
+	wordPattern := buildWordBoundaryPattern(pattern)
 	return t.searchInContent(path, content, wordPattern)
+}
+
+// rubyMethodSuffix tracks if a pattern ends with Ruby method suffix
+type patternInfo struct {
+	regex           *regexp.Regexp
+	endsWithSpecial bool // ends with ? ! or =
+}
+
+// buildWordBoundaryPattern creates a regex that properly handles Ruby method names
+// ending in ? ! or = which can't use \b at the end
+func buildWordBoundaryPattern(pattern string) *regexp.Regexp {
+	return buildPatternInfo(pattern).regex
+}
+
+func buildPatternInfo(pattern string) patternInfo {
+	escapedPattern := regexp.QuoteMeta(pattern)
+	var regexPattern string
+	endsWithSpecial := false
+	if len(pattern) > 0 {
+		lastChar := pattern[len(pattern)-1]
+		if lastChar == '?' || lastChar == '!' || lastChar == '=' {
+			regexPattern = `\b` + escapedPattern + `(?:[^a-zA-Z0-9_]|$)`
+			endsWithSpecial = true
+		} else {
+			regexPattern = `\b` + escapedPattern + `\b`
+		}
+	} else {
+		regexPattern = `\b` + escapedPattern + `\b`
+	}
+	return patternInfo{
+		regex:           regexp.MustCompile(regexPattern),
+		endsWithSpecial: endsWithSpecial,
+	}
 }

@@ -170,6 +170,16 @@ func extractWordAt(content string, line, char int) string {
 		}
 	}
 
+	// If cursor is on a Ruby method suffix (? ! =), move back into the word
+	if char < len(lineText) {
+		ch := lineText[char]
+		if ch == '?' || ch == '!' || ch == '=' {
+			if char > 0 && isWordChar(lineText[char-1]) {
+				char-- // Move into the word part
+			}
+		}
+	}
+
 	// Find word boundaries
 	// Ruby identifiers: letters, digits, underscores, and can end with ? ! =
 	start := char

@@ -144,8 +144,12 @@ func (m *MethodMatcher) Match(line string, ctx *ParseContext) *MatchResult {
 	sym.FullName = sym.ComputeFullName()
 
 	return &MatchResult{
-		Symbols:   []*types.Symbol{sym},
-		PushScope: "", // Methods don't create scope for our purposes
+		Symbols: []*types.Symbol{sym},
+		EnterMethod: &MethodContext{
+			FullName:  sym.FullName,
+			StartLine: ctx.LineNum,
+			// NestingDepth will be set by scanner
+		},
 	}
 }
 

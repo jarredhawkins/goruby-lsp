@@ -116,7 +116,15 @@ func (s *Server) handleDefinition(ctx context.Context, reply jsonrpc2.Replier, r
 
 	log.Printf("definition request for word: %s at %s:%d:%d", word, filePath, line, char)
 
-	// Look up definitions
+	// Try local variable lookup first (lowercase names only)
+	if len(word) > 0 && ((word[0] >= 'a' && word[0] <= 'z') || word[0] == '_') {
+		// line is 0-indexed from LSP, FindLocalVariable expects 1-indexed
+		if sym := s.index.FindLocalVariable(word, filePath, line+1); sym != nil {
+			return reply(ctx, symbolToLocation(sym), nil)
+		}
+	}
+
+	// Look up definitions in global index
 	symbols := s.index.FindDefinitionsInFile(word, filePath)
 	if len(symbols) == 0 {
 		return reply(ctx, nil, nil)
