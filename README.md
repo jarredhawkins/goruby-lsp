@@ -2,7 +2,7 @@
 
 A fast, lightweight LSP server for Ruby projects written in Go.
 
-Provides **go to definition** and **find references** for Ruby codebases with minimal setup and near-instant startup.
+Provides **go to definition** and **find references** for Ruby codebases with minimal setup and fast startup.
 
 ## Installation
 
@@ -26,8 +26,6 @@ Run from your Ruby project root:
 cd /path/to/your/rails/app
 goruby-lsp
 ```
-
-The server communicates over stdio using the Language Server Protocol.
 
 ### CLI Flags
 
@@ -74,10 +72,10 @@ This project uses **regex-based parsing** rather than a proper AST parser like [
 
 | Benefit | Explanation |
 |---------|-------------|
-| **No CGO** | Tree-sitter requires C bindings, complicating cross-compilation and builds |
 | **Fast startup** | No grammar loading or parser initialization overhead |
 | **Simple plugins** | Adding new patterns is just writing a regex |
-| **Small binary** | ~5MB vs 15MB+ with tree-sitter grammars |
+| **Small binary** | Works on most repos straight from binary installation |
+| **No composed gemfile** | Avoids a lot of complexity that comes with using the [composed Gemfile](https://shopify.github.io/ruby-lsp/composed-bundle.html)  |
 
 ### What You Lose
 
@@ -91,7 +89,7 @@ This project uses **regex-based parsing** rather than a proper AST parser like [
 ### When to Use This vs. Solargraph/Ruby LSP
 
 Compared to the Ruby LSP, I've found this trades latency and false negatives, for speed and false positives. 
-I find this generally fits my workflow better than the LSP, but ultimately that tradeoff is up to you.
+I find this generally fits my workflow better than the ruby-lsp, but ultimately that tradeoff is up to you.
 
 | Use goruby-lsp when... | Use Solargraph/ruby-lsp when... |
 |------------------------|--------------------------------|
