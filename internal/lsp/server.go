@@ -195,6 +195,17 @@ func (s *Server) handleReferences(ctx context.Context, reply jsonrpc2.Replier, r
 		})
 	}
 
+	// Find symbols that target this name (e.g., relations targeting a class)
+	targetingRefs := s.index.FindTargetingSymbols(word)
+	for _, sym := range targetingRefs {
+		key := fmt.Sprintf("%s:%d:%d", sym.FilePath, sym.Line, sym.Column)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		locations = append(locations, symbolToLocation(sym))
+	}
+
 	// Include declarations if requested - deduplication prevents double-adding
 	if params.Context.IncludeDeclaration {
 		symbols := s.index.FindDefinitions(word)

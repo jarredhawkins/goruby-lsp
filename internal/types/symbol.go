@@ -16,6 +16,7 @@ const (
 	KindAttrAccessor
 	KindLocalVariable // Local variable inside a method
 	KindCustom        // For plugin-defined symbols
+	KindRelation      // Rails relation (belongs_to, has_one, has_many)
 )
 
 func (k SymbolKind) String() string {
@@ -40,6 +41,8 @@ func (k SymbolKind) String() string {
 		return "local_variable"
 	case KindCustom:
 		return "custom"
+	case KindRelation:
+		return "relation"
 	default:
 		return "unknown"
 	}
@@ -57,6 +60,7 @@ type Symbol struct {
 	Scope          []string // Enclosing namespaces ["MyModule", "MyClass"]
 	FullName       string   // Computed: "MyModule::MyClass#my_method"
 	MethodFullName string   // For local variables: the containing method's FullName
+	TargetName     string   // For relations: the target class name to look up
 }
 
 // ComputeFullName generates the fully qualified name for this symbol

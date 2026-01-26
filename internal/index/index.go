@@ -193,7 +193,23 @@ func (idx *Index) FindDefinitions(name string) []*Symbol {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
-	// Try exact full name match first
+	return idx.findDefinitionsLocked(name)
+}
+
+// findDefinitionsLocked performs the lookup without acquiring the lock.
+// Caller must hold at least a read lock.
+func (idx *Index) findDefinitionsLocked(name string) []*Symbol {
+	// Check symbols with TargetName first - clicking :address in "belongs_to :address"
+	// should navigate to the Address class
+	for _, syms := range idx.byFile {
+		for _, sym := range syms {
+			if sym.Name == name && sym.TargetName != "" {
+				return idx.findDefinitionsLocked(sym.TargetName)
+			}
+		}
+	}
+
+	// Try exact full name match
 	if syms, ok := idx.symbols[name]; ok {
 		result := make([]*Symbol, len(syms))
 		copy(result, syms)
@@ -202,22 +218,41 @@ func (idx *Index) FindDefinitions(name string) []*Symbol {
 
 	// Try short name lookup
 	fullNames, ok := idx.shortNames[name]
-	if !ok {
-		return nil
-	}
-
-	var result []*Symbol
-	for _, fullName := range fullNames {
-		if syms, ok := idx.symbols[fullName]; ok {
-			result = append(result, syms...)
+	if ok {
+		var result []*Symbol
+		for _, fullName := range fullNames {
+			if syms, ok := idx.symbols[fullName]; ok {
+				result = append(result, syms...)
+			}
+		}
+		if len(result) > 0 {
+			return result
 		}
 	}
-	return result
+
+	return nil
 }
 
 // FindReferences finds all references to the given name using trigram search
 func (idx *Index) FindReferences(name string) []*Reference {
 	return idx.trigram.Search(name)
+}
+
+// FindTargetingSymbols finds all symbols that target the given name
+// (e.g., relations targeting a class, callbacks referencing a method)
+func (idx *Index) FindTargetingSymbols(targetName string) []*Symbol {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+
+	var result []*Symbol
+	for _, syms := range idx.byFile {
+		for _, sym := range syms {
+			if sym.TargetName == targetName {
+				result = append(result, sym)
+			}
+		}
+	}
+	return result
 }
 
 // FindDefinitionsInFile returns definitions matching the name, preferring those in the given file

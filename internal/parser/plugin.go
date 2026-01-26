@@ -82,5 +82,6 @@ func RegisterDefaults(r *Registry) {
 	r.Register(&MethodMatcher{})
 	r.Register(&ConstantMatcher{})
 	r.Register(&LocalVariableMatcher{})
+	r.Register(&RelationMatcher{})
 	r.Register(&EndMatcher{})
 }
