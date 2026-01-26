@@ -3,6 +3,7 @@ package lsp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 
@@ -167,11 +168,18 @@ func (s *Server) handleReferences(ctx context.Context, reply jsonrpc2.Replier, r
 
 	log.Printf("references request for word: %s", word)
 
+	// Use a map to deduplicate by location key (file:line:col)
+	seen := make(map[string]struct{})
 	var locations []Location
 
 	// Find all references using trigram search
 	refs := s.index.FindReferences(word)
 	for _, ref := range refs {
+		key := fmt.Sprintf("%s:%d:%d", ref.FilePath, ref.Line, ref.Column)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
 		locations = append(locations, Location{
 			URI: pathToURI(ref.FilePath),
 			Range: Range{
@@ -187,10 +195,15 @@ func (s *Server) handleReferences(ctx context.Context, reply jsonrpc2.Replier, r
 		})
 	}
 
-	// Include declarations if requested
+	// Include declarations if requested - deduplication prevents double-adding
 	if params.Context.IncludeDeclaration {
 		symbols := s.index.FindDefinitions(word)
 		for _, sym := range symbols {
+			key := fmt.Sprintf("%s:%d:%d", sym.FilePath, sym.Line, sym.Column)
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
 			locations = append(locations, symbolToLocation(sym))
 		}
 	}
