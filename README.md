@@ -86,12 +86,12 @@ This project uses **regex-based parsing** rather than a proper AST parser like [
 | **No type inference** | Can't follow `include`/`extend` to find inherited methods |
 | **Metaprogramming** | `define_method`, `class_eval`, etc. are invisible |
 
-### When to Use This vs. Solargraph/Ruby LSP
+### When to Use This vs. Ruby LSP
 
 Compared to the Ruby LSP, I've found this trades latency and false negatives, for speed and false positives. 
 I find this generally fits my workflow better than the ruby-lsp, but ultimately that tradeoff is up to you.
 
-| Use goruby-lsp when... | Use Solargraph/ruby-lsp when... |
+| Use goruby-lsp when... | Use ruby-lsp when... |
 |------------------------|--------------------------------|
 | You just need "good enough" navigation | You need completion, hover, diagnostics |
 | You want a single binary with no Ruby deps | You don't mind Ruby/gem dependencies |
@@ -116,10 +116,11 @@ I find this generally fits my workflow better than the ruby-lsp, but ultimately 
 | Modules | `module MyModule` |
 | Methods | `def my_method`, `def self.class_method` |
 | Constants | `MY_CONST = value` |
+| Rails relations | `belongs_to :user`, `has_many :posts`, `has_one :profile` |
 
 The parser uses a plugin system—additional patterns (like `attr_accessor`, Rails DSLs) can be added.
 
-## Extending
+## Adding functionality
 
 ### Adding a Custom Matcher
 
