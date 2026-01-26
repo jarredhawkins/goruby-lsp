@@ -18,12 +18,47 @@ func NewScanner(registry *Registry) *Scanner {
 	}
 }
 
+// tryStartMultiline checks if any matcher wants to start multi-line accumulation
+func (s *Scanner) tryStartMultiline(matchers []Matcher, line string, lineNum int) *accumulator {
+	for _, matcher := range matchers {
+		if detector, ok := matcher.(MultilineDetector); ok {
+			if isStart, opener, closer := detector.StartsMultiline(line); isStart {
+				acc := &accumulator{
+					startLine: lineNum,
+					opener:    opener,
+					closer:    closer,
+				}
+				acc.addLine(line)
+				return acc
+			}
+		}
+	}
+	return nil
+}
+
 // accumulator tracks multi-line construct state
 type accumulator struct {
 	buffer    strings.Builder
 	startLine int
-	closer    rune
+	opener    string
+	closer    string
 	depth     int
+}
+
+func (a *accumulator) addLine(line string) {
+	if a.buffer.Len() > 0 {
+		a.buffer.WriteString(" ")
+	}
+	a.buffer.WriteString(line)
+	a.depth += strings.Count(line, a.opener) - strings.Count(line, a.closer)
+}
+
+func (a *accumulator) isComplete() bool {
+	return a.depth <= 0
+}
+
+func (a *accumulator) content() string {
+	return a.buffer.String()
 }
 
 // Parse scans the file content and returns all discovered symbols
@@ -56,66 +91,22 @@ func (s *Scanner) Parse(filePath string, content []byte) []*types.Symbol {
 			continue
 		}
 
-		// Handle active multi-line accumulation
+		// Handle multi-line accumulation
 		if acc != nil {
-			// Add line to buffer
-			acc.buffer.WriteString(" ")
-			acc.buffer.WriteString(trimmed)
-
-			// Update depth based on delimiter
-			for _, ch := range trimmed {
-				if ch == '(' {
-					acc.depth++
-				} else if ch == ')' {
-					acc.depth--
-				}
+			acc.addLine(trimmed)
+			if !acc.isComplete() {
+				continue
 			}
-
-			// Check if multi-line construct is complete
-			if acc.depth <= 0 {
-				// Process accumulated content
-				joinedLine := acc.buffer.String()
-				ctx.LineNum = acc.startLine // Use start line for symbol location
-
-				for _, matcher := range matchers {
-					result := matcher.Match(joinedLine, ctx)
-					if result == nil {
-						continue
-					}
-					symbols = append(symbols, result.Symbols...)
-					break
-				}
-				acc = nil
+			// Process accumulated content
+			ctx.LineNum = acc.startLine
+			line = acc.content()
+			acc = nil
+		} else if acc = s.tryStartMultiline(matchers, trimmed, ctx.LineNum); acc != nil {
+			if !acc.isComplete() {
+				continue
 			}
-			continue
-		}
-
-		// Check if any matcher wants to start multi-line accumulation
-		var startedMultiline bool
-		for _, matcher := range matchers {
-			if detector, ok := matcher.(MultilineDetector); ok {
-				if isStart, closer := detector.StartsMultiline(line); isStart {
-					acc = &accumulator{
-						startLine: ctx.LineNum,
-						closer:    closer,
-						depth:     0,
-					}
-					acc.buffer.WriteString(trimmed)
-					// Count initial delimiters
-					for _, ch := range trimmed {
-						if ch == '(' {
-							acc.depth++
-						} else if ch == ')' {
-							acc.depth--
-						}
-					}
-					startedMultiline = true
-					break
-				}
-			}
-		}
-		if startedMultiline {
-			continue
+			line = acc.content()
+			acc = nil
 		}
 
 		// Try each matcher in priority order

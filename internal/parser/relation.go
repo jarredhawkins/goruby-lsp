@@ -24,17 +24,17 @@ var relationPattern = regexp.MustCompile(
 var multilineStartPattern = regexp.MustCompile(`^\s*(belongs_to|has_one|has_many)\s*\(`)
 
 // StartsMultiline implements MultilineDetector
-func (m *RelationMatcher) StartsMultiline(line string) (bool, rune) {
+func (m *RelationMatcher) StartsMultiline(line string) (bool, string, string) {
 	if !multilineStartPattern.MatchString(line) {
-		return false, 0
+		return false, "", ""
 	}
 	// Check if line has unclosed parens
 	openCount := strings.Count(line, "(")
 	closeCount := strings.Count(line, ")")
 	if openCount > closeCount {
-		return true, ')'
+		return true, "(", ")"
 	}
-	return false, 0
+	return false, "", ""
 }
 
 func (m *RelationMatcher) Match(line string, ctx *ParseContext) *MatchResult {

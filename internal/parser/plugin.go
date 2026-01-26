@@ -48,8 +48,8 @@ type Matcher interface {
 // MultilineDetector is optionally implemented by matchers that handle multi-line constructs
 type MultilineDetector interface {
 	// StartsMultiline returns true if the line starts an incomplete multi-line construct
-	// Returns (isStart, delimiter) where delimiter is the closing character to look for
-	StartsMultiline(line string) (bool, rune)
+	// Returns (isStart, opener, closer) where opener/closer are the delimiter pair to track
+	StartsMultiline(line string) (bool, string, string)
 }
 
 // Registry holds all registered matchers
