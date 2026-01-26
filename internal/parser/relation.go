@@ -14,10 +14,28 @@ func (m *RelationMatcher) Name() string  { return "relation" }
 func (m *RelationMatcher) Priority() int { return 85 }
 
 // Pattern: belongs_to/has_one/has_many :name, optional class_name: 'ClassName'
+// Updated to handle whitespace between elements for multi-line support
 var relationPattern = regexp.MustCompile(
-	`^\s*(belongs_to|has_one|has_many)\s+:([a-z_][a-z0-9_]*)` +
+	`^\s*(belongs_to|has_one|has_many)\s*[\(\s]+:([a-z_][a-z0-9_]*)` +
 		`(?:.*class_name:\s*['"]([A-Za-z][A-Za-z0-9_:]*)['"'])?`,
 )
+
+// multilineStartPattern detects start of multi-line relation definitions
+var multilineStartPattern = regexp.MustCompile(`^\s*(belongs_to|has_one|has_many)\s*\(`)
+
+// StartsMultiline implements MultilineDetector
+func (m *RelationMatcher) StartsMultiline(line string) (bool, rune) {
+	if !multilineStartPattern.MatchString(line) {
+		return false, 0
+	}
+	// Check if line has unclosed parens
+	openCount := strings.Count(line, "(")
+	closeCount := strings.Count(line, ")")
+	if openCount > closeCount {
+		return true, ')'
+	}
+	return false, 0
+}
 
 func (m *RelationMatcher) Match(line string, ctx *ParseContext) *MatchResult {
 	// Only match inside classes

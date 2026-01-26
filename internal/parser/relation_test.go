@@ -192,6 +192,91 @@ func TestSingular(t *testing.T) {
 	}
 }
 
+func TestRelationMatcher_MultiLine(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		wantTarget string
+		wantName   string
+	}{
+		{
+			name: "multi-line has_many with class_name",
+			input: `class Order
+  has_many(
+    :items,
+    class_name: 'LineItem',
+    foreign_key: :order_id,
+  )
+end`,
+			wantTarget: "LineItem",
+			wantName:   "items",
+		},
+		{
+			name: "multi-line belongs_to with namespaced class_name",
+			input: `class Comment
+  belongs_to(
+    :author,
+    class_name: 'Admin::User',
+  )
+end`,
+			wantTarget: "Admin::User",
+			wantName:   "author",
+		},
+		{
+			name: "multi-line has_one without class_name",
+			input: `class User
+  has_one(
+    :profile,
+    dependent: :destroy,
+  )
+end`,
+			wantTarget: "Profile",
+			wantName:   "profile",
+		},
+		{
+			name: "multi-line has_many infers singular class",
+			input: `class Post
+  has_many(
+    :comments,
+    dependent: :destroy,
+  )
+end`,
+			wantTarget: "Comment",
+			wantName:   "comments",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			registry := NewRegistry()
+			RegisterDefaults(registry)
+			scanner := NewScanner(registry)
+
+			symbols := scanner.Parse("/test/model.rb", []byte(tt.input))
+
+			// Find the relation symbol
+			var relationSym *types.Symbol
+			for _, sym := range symbols {
+				if sym.Kind == types.KindRelation {
+					relationSym = sym
+					break
+				}
+			}
+
+			if relationSym == nil {
+				t.Fatalf("expected to find a relation symbol, got none. All symbols: %+v", symbols)
+			}
+
+			if relationSym.Name != tt.wantName {
+				t.Errorf("expected Name %q, got %q", tt.wantName, relationSym.Name)
+			}
+			if relationSym.TargetName != tt.wantTarget {
+				t.Errorf("expected TargetName %q, got %q", tt.wantTarget, relationSym.TargetName)
+			}
+		})
+	}
+}
+
 func TestToClassName(t *testing.T) {
 	tests := []struct {
 		name        string

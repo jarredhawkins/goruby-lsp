@@ -18,6 +18,14 @@ func NewScanner(registry *Registry) *Scanner {
 	}
 }
 
+// accumulator tracks multi-line construct state
+type accumulator struct {
+	buffer    strings.Builder
+	startLine int
+	closer    rune
+	depth     int
+}
+
 // Parse scans the file content and returns all discovered symbols
 func (s *Scanner) Parse(filePath string, content []byte) []*types.Symbol {
 	lines := strings.Split(string(content), "\n")
@@ -34,6 +42,9 @@ func (s *Scanner) Parse(filePath string, content []byte) []*types.Symbol {
 
 	matchers := s.registry.Matchers()
 
+	// Multi-line accumulator state
+	var acc *accumulator
+
 	for lineNum, line := range lines {
 		ctx.LineNum = lineNum + 1 // 1-indexed
 		ctx.CurrentScope = scopeStack
@@ -42,6 +53,68 @@ func (s *Scanner) Parse(filePath string, content []byte) []*types.Symbol {
 		// Skip empty lines and comments
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+
+		// Handle active multi-line accumulation
+		if acc != nil {
+			// Add line to buffer
+			acc.buffer.WriteString(" ")
+			acc.buffer.WriteString(trimmed)
+
+			// Update depth based on delimiter
+			for _, ch := range trimmed {
+				if ch == '(' {
+					acc.depth++
+				} else if ch == ')' {
+					acc.depth--
+				}
+			}
+
+			// Check if multi-line construct is complete
+			if acc.depth <= 0 {
+				// Process accumulated content
+				joinedLine := acc.buffer.String()
+				ctx.LineNum = acc.startLine // Use start line for symbol location
+
+				for _, matcher := range matchers {
+					result := matcher.Match(joinedLine, ctx)
+					if result == nil {
+						continue
+					}
+					symbols = append(symbols, result.Symbols...)
+					break
+				}
+				acc = nil
+			}
+			continue
+		}
+
+		// Check if any matcher wants to start multi-line accumulation
+		var startedMultiline bool
+		for _, matcher := range matchers {
+			if detector, ok := matcher.(MultilineDetector); ok {
+				if isStart, closer := detector.StartsMultiline(line); isStart {
+					acc = &accumulator{
+						startLine: ctx.LineNum,
+						closer:    closer,
+						depth:     0,
+					}
+					acc.buffer.WriteString(trimmed)
+					// Count initial delimiters
+					for _, ch := range trimmed {
+						if ch == '(' {
+							acc.depth++
+						} else if ch == ')' {
+							acc.depth--
+						}
+					}
+					startedMultiline = true
+					break
+				}
+			}
+		}
+		if startedMultiline {
 			continue
 		}
 

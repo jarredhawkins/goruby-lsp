@@ -45,6 +45,13 @@ type Matcher interface {
 	Priority() int
 }
 
+// MultilineDetector is optionally implemented by matchers that handle multi-line constructs
+type MultilineDetector interface {
+	// StartsMultiline returns true if the line starts an incomplete multi-line construct
+	// Returns (isStart, delimiter) where delimiter is the closing character to look for
+	StartsMultiline(line string) (bool, rune)
+}
+
 // Registry holds all registered matchers
 type Registry struct {
 	matchers []Matcher
