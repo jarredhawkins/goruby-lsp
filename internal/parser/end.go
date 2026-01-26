@@ -18,6 +18,7 @@ func (m *EndMatcher) Match(line string, ctx *ParseContext) *MatchResult {
 		return nil
 	}
 	return &MatchResult{
-		PopScope: true,
+		ClosesBlock: true,
+		PopScope:    true,
 	}
 }

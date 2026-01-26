@@ -116,3 +116,69 @@ z = 3`
 		t.Errorf("Expected 1 local variable (y inside method), got %d", localVars)
 	}
 }
+
+func TestLocalVariableWithDoBlocks(t *testing.T) {
+	// This tests the fix for do...end block nesting
+	// The method EndLine should be set correctly even with nested blocks
+	content := `class Worker
+  def perform
+    items = []
+    items.each do |item|
+      process(item)
+    end
+    result = Hash.new(0)
+    items.each_with_index do |item, idx|
+      result[idx] = item
+    end
+    final_count = result.size
+  end
+end`
+
+	registry := NewRegistry()
+	RegisterDefaults(registry)
+
+	scanner := NewScanner(registry)
+	symbols := scanner.Parse("/test/test.rb", []byte(content))
+
+	// Find the method
+	var method *types.Symbol
+	for _, sym := range symbols {
+		if sym.Kind == types.KindMethod && sym.Name == "perform" {
+			method = sym
+			break
+		}
+	}
+
+	if method == nil {
+		t.Fatal("Method 'perform' not found")
+	}
+
+	t.Logf("Method perform: lines %d-%d", method.Line, method.EndLine)
+
+	// Method should end on line 12 (the 'end' of 'def perform')
+	if method.EndLine != 12 {
+		t.Errorf("Expected method EndLine to be 12, got %d", method.EndLine)
+	}
+
+	// Find all local variables
+	var localVars []*types.Symbol
+	for _, sym := range symbols {
+		if sym.Kind == types.KindLocalVariable {
+			localVars = append(localVars, sym)
+			t.Logf("Local var %s at line %d in method %s", sym.Name, sym.Line, sym.MethodFullName)
+		}
+	}
+
+	// Should find: items (line 3), result (line 7), final_count (line 11)
+	if len(localVars) != 3 {
+		t.Errorf("Expected 3 local variables, got %d", len(localVars))
+	}
+
+	// Verify all local variables are assigned to the method
+	for _, lv := range localVars {
+		if lv.MethodFullName != method.FullName {
+			t.Errorf("Local var %s should be in method %s, but is in %s",
+				lv.Name, method.FullName, lv.MethodFullName)
+		}
+	}
+}

@@ -24,10 +24,14 @@ type ParseContext struct {
 // MatchResult contains extracted symbol info from a match
 type MatchResult struct {
 	Symbols []*types.Symbol
-	// PushScope indicates this match opens a new scope (e.g., class, module)
+	// PushScope adds a name to the scope stack (for building fully qualified names)
 	PushScope string
-	// PopScope indicates this match closes a scope (e.g., end keyword)
+	// PopScope removes a name from the scope stack
 	PopScope bool
+	// OpensBlock increments nesting depth (class, module, method, do blocks)
+	OpensBlock bool
+	// ClosesBlock decrements nesting depth (end keyword)
+	ClosesBlock bool
 	// EnterMethod indicates this match starts a method (set by MethodMatcher)
 	EnterMethod *MethodContext
 }
@@ -90,5 +94,6 @@ func RegisterDefaults(r *Registry) {
 	r.Register(&ConstantMatcher{})
 	r.Register(&LocalVariableMatcher{})
 	r.Register(&RelationMatcher{})
+	r.Register(&DoMatcher{})
 	r.Register(&EndMatcher{})
 }

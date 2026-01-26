@@ -45,11 +45,12 @@ func (m *MethodMatcher) Match(line string, ctx *ParseContext) *MatchResult {
 	sym.FullName = sym.ComputeFullName()
 
 	return &MatchResult{
-		Symbols: []*types.Symbol{sym},
+		Symbols:    []*types.Symbol{sym},
+		OpensBlock: true,
 		EnterMethod: &MethodContext{
 			FullName:  sym.FullName,
 			StartLine: ctx.LineNum,
-			// NestingDepth will be set by scanner
+			// NestingDepth will be set by scanner after OpensBlock is processed
 		},
 	}
 }

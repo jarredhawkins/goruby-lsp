@@ -46,7 +46,8 @@ func (m *ModuleMatcher) Match(line string, ctx *ParseContext) *MatchResult {
 	sym.FullName = sym.ComputeFullName()
 
 	return &MatchResult{
-		Symbols:   []*types.Symbol{sym},
-		PushScope: shortName,
+		Symbols:    []*types.Symbol{sym},
+		PushScope:  shortName,
+		OpensBlock: true,
 	}
 }

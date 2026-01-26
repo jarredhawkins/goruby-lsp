@@ -119,15 +119,18 @@ func (s *Scanner) Parse(filePath string, content []byte) []*types.Symbol {
 			// Collect symbols
 			symbols = append(symbols, result.Symbols...)
 
-			// Handle scope changes (class/module)
+			// Handle scope naming (independent of nesting)
 			if result.PushScope != "" {
 				scopeStack = append(scopeStack, result.PushScope)
+			}
+
+			// Handle block opening (unified)
+			if result.OpensBlock {
 				nestingDepth++
 			}
 
-			// Handle method entry
+			// Handle method entry (uses nestingDepth AFTER increment)
 			if result.EnterMethod != nil {
-				nestingDepth++
 				currentMethod = result.EnterMethod
 				currentMethod.NestingDepth = nestingDepth
 				// Track the method symbol to set EndLine later
@@ -139,24 +142,23 @@ func (s *Scanner) Parse(filePath string, content []byte) []*types.Symbol {
 				}
 			}
 
-			// Handle scope exit (end keyword)
-			if result.PopScope {
-				if nestingDepth > 0 {
-					// Check if we're exiting a method
-					if currentMethod != nil && nestingDepth == currentMethod.NestingDepth {
-						// Method ended - set EndLine on the method symbol
-						if methodSymbol != nil {
-							methodSymbol.EndLine = ctx.LineNum
-							methodSymbol = nil
-						}
-						currentMethod = nil
+			// Handle block closing
+			if result.ClosesBlock && nestingDepth > 0 {
+				// Check if we're exiting a method
+				if currentMethod != nil && nestingDepth == currentMethod.NestingDepth {
+					// Method ended - set EndLine on the method symbol
+					if methodSymbol != nil {
+						methodSymbol.EndLine = ctx.LineNum
+						methodSymbol = nil
 					}
-					nestingDepth--
-					// Only pop from scopeStack if nesting matches scope count
-					if nestingDepth < len(scopeStack) {
-						scopeStack = scopeStack[:len(scopeStack)-1]
-					}
+					currentMethod = nil
 				}
+				nestingDepth--
+			}
+
+			// Handle scope pop (independent of nesting)
+			if result.PopScope && len(scopeStack) > 0 {
+				scopeStack = scopeStack[:len(scopeStack)-1]
 			}
 
 			// Only first match per line
