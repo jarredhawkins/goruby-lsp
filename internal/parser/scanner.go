@@ -61,43 +61,50 @@ func (a *accumulator) content() string {
 	return a.buffer.String()
 }
 
-// Parse scans the file content and returns all discovered symbols
-func (s *Scanner) Parse(filePath string, content []byte) []*types.Symbol {
+// scanState holds the shared scope/nesting state during a scan.
+type scanState struct {
+	ScopeStack   []string
+	NestingDepth int
+}
+
+// scanCallbacks controls the scan loop behavior.
+type scanCallbacks struct {
+	// beforeMatch is called at the start of each line, before matchers run.
+	// Use it to set up context (e.g. CurrentMethod). May be nil.
+	beforeMatch func(ctx *ParseContext, state *scanState)
+
+	// onResult is called after a matcher produces a result, before scope/nesting
+	// updates are applied. Return false to stop scanning.
+	onResult func(ctx *ParseContext, result *MatchResult, state *scanState) bool
+}
+
+// scanLines runs the core line-by-line parse loop.
+func (s *Scanner) scanLines(content []byte, filePath string, cb scanCallbacks) *scanState {
 	lines := strings.Split(string(content), "\n")
-	var symbols []*types.Symbol
-	var scopeStack []string
-	var nestingDepth int             // Track all block nesting (class, module, method, etc.)
-	var currentMethod *MethodContext // Current method being parsed
-	var methodSymbol *types.Symbol   // Symbol for current method (to set EndLine)
+	state := &scanState{}
 
 	ctx := &ParseContext{
 		FilePath:     filePath,
-		CurrentScope: scopeStack,
+		CurrentScope: state.ScopeStack,
 	}
 
 	matchers := s.registry.Matchers()
-
-	// Multi-line accumulator state
 	var acc *accumulator
 
 	for lineNum, line := range lines {
-		ctx.LineNum = lineNum + 1 // 1-indexed
-		ctx.CurrentScope = scopeStack
-		ctx.CurrentMethod = currentMethod
+		ctx.LineNum = lineNum + 1
+		ctx.CurrentScope = state.ScopeStack
 
-		// Skip empty lines and comments
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
 
-		// Handle multi-line accumulation
 		if acc != nil {
 			acc.addLine(trimmed)
 			if !acc.isComplete() {
 				continue
 			}
-			// Process accumulated content
 			ctx.LineNum = acc.startLine
 			line = acc.content()
 			acc = nil
@@ -109,31 +116,57 @@ func (s *Scanner) Parse(filePath string, content []byte) []*types.Symbol {
 			acc = nil
 		}
 
-		// Try each matcher in priority order
+		if cb.beforeMatch != nil {
+			cb.beforeMatch(ctx, state)
+		}
+
 		for _, matcher := range matchers {
 			result := matcher.Match(line, ctx)
 			if result == nil {
 				continue
 			}
 
-			// Collect symbols
+			if !cb.onResult(ctx, result, state) {
+				return state
+			}
+
+			if result.PushScope != "" {
+				state.ScopeStack = append(state.ScopeStack, result.PushScope)
+			}
+			if result.OpensBlock {
+				state.NestingDepth++
+			}
+			if result.ClosesBlock && state.NestingDepth > 0 {
+				state.NestingDepth--
+			}
+			if result.PopScope && state.NestingDepth < len(state.ScopeStack) {
+				state.ScopeStack = state.ScopeStack[:len(state.ScopeStack)-1]
+			}
+			break
+		}
+	}
+
+	return state
+}
+
+// Parse scans the file content and returns all discovered symbols
+func (s *Scanner) Parse(filePath string, content []byte) []*types.Symbol {
+	var symbols []*types.Symbol
+	var currentMethod *MethodContext
+	var methodSymbol *types.Symbol
+
+	s.scanLines(content, filePath, scanCallbacks{
+		beforeMatch: func(ctx *ParseContext, state *scanState) {
+			ctx.CurrentMethod = currentMethod
+		},
+		onResult: func(ctx *ParseContext, result *MatchResult, state *scanState) bool {
 			symbols = append(symbols, result.Symbols...)
 
-			// Handle scope naming (independent of nesting)
-			if result.PushScope != "" {
-				scopeStack = append(scopeStack, result.PushScope)
-			}
-
-			// Handle block opening (unified)
-			if result.OpensBlock {
-				nestingDepth++
-			}
-
-			// Handle method entry (uses nestingDepth AFTER increment)
 			if result.EnterMethod != nil {
 				currentMethod = result.EnterMethod
-				currentMethod.NestingDepth = nestingDepth
-				// Track the method symbol to set EndLine later
+				// NestingDepth will be incremented after this callback returns,
+				// so add 1 to account for the block this result opens.
+				currentMethod.NestingDepth = state.NestingDepth + 1
 				for _, sym := range result.Symbols {
 					if sym.Kind == types.KindMethod || sym.Kind == types.KindSingletonMethod {
 						methodSymbol = sym
@@ -142,31 +175,35 @@ func (s *Scanner) Parse(filePath string, content []byte) []*types.Symbol {
 				}
 			}
 
-			// Handle block closing
-			if result.ClosesBlock && nestingDepth > 0 {
-				// Check if we're exiting a method
-				if currentMethod != nil && nestingDepth == currentMethod.NestingDepth {
-					// Method ended - set EndLine on the method symbol
+			if result.ClosesBlock && state.NestingDepth > 0 {
+				// Check BEFORE scanLines decrements nesting
+				if currentMethod != nil && state.NestingDepth == currentMethod.NestingDepth {
 					if methodSymbol != nil {
 						methodSymbol.EndLine = ctx.LineNum
 						methodSymbol = nil
 					}
 					currentMethod = nil
 				}
-				nestingDepth--
 			}
 
-			// Handle scope pop (independent of nesting)
-			if result.PopScope && len(scopeStack) > 0 {
-				scopeStack = scopeStack[:len(scopeStack)-1]
-			}
-
-			// Only first match per line
-			break
-		}
-	}
+			return true
+		},
+	})
 
 	return symbols
+}
+
+// ScopeAtLine returns the scope stack at the given 1-indexed line.
+func (s *Scanner) ScopeAtLine(content []byte, targetLine int) []string {
+	state := s.scanLines(content, "", scanCallbacks{
+		onResult: func(ctx *ParseContext, result *MatchResult, state *scanState) bool {
+			return ctx.LineNum <= targetLine
+		},
+	})
+
+	scope := make([]string, len(state.ScopeStack))
+	copy(scope, state.ScopeStack)
+	return scope
 }
 
 // ParseFile reads and parses a Ruby file

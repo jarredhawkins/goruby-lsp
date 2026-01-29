@@ -182,3 +182,64 @@ end`
 		}
 	}
 }
+
+func TestNestedDoBlocksPreserveScope(t *testing.T) {
+	// Regression test: nested do blocks should not pop the class scope.
+	// The bug was that every 'end' popped scopeStack if len > 0, but it should
+	// only pop when nestingDepth drops below len(scopeStack).
+	content := `class MyClass
+  def perform
+    items = get_items
+    items.each do |item|
+      item.values.each do |value|
+        process(value)
+      end
+    end
+    final_result = "done"
+  end
+
+  def another_method
+    x = 1
+  end
+end`
+
+	registry := NewRegistry()
+	RegisterDefaults(registry)
+	scanner := NewScanner(registry)
+	symbols := scanner.Parse("/test/test.rb", []byte(content))
+
+	// Build lookup maps
+	byFullName := make(map[string]*types.Symbol)
+	for _, sym := range symbols {
+		if existing, ok := byFullName[sym.FullName]; ok {
+			t.Errorf("Duplicate symbol: %s (lines %d and %d)", sym.FullName, existing.Line, sym.Line)
+		}
+		byFullName[sym.FullName] = sym
+	}
+
+	// Verify methods have correct scope (key assertion: if scope was corrupted,
+	// another_method would have wrong scope like "#another_method")
+	expectedMethods := []string{"MyClass#perform", "MyClass#another_method"}
+	for _, name := range expectedMethods {
+		if byFullName[name] == nil {
+			t.Errorf("Method %s not found (scope likely corrupted)", name)
+		}
+	}
+
+	// Verify local variables have correct method scope
+	expectedVars := map[string]string{
+		"MyClass#perform@items":        "MyClass#perform",
+		"MyClass#perform@final_result": "MyClass#perform",
+		"MyClass#another_method@x":     "MyClass#another_method",
+	}
+	for fullName, expectedMethod := range expectedVars {
+		sym := byFullName[fullName]
+		if sym == nil {
+			t.Errorf("Local variable %s not found", fullName)
+			continue
+		}
+		if sym.MethodFullName != expectedMethod {
+			t.Errorf("Variable %s: expected method %s, got %s", fullName, expectedMethod, sym.MethodFullName)
+		}
+	}
+}

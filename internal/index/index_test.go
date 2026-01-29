@@ -91,6 +91,54 @@ end`)
 	}
 }
 
+func TestFindDefinitions_PartiallyQualifiedName(t *testing.T) {
+	tmpDir, _ := os.MkdirTemp("", "index-test-*")
+	defer os.RemoveAll(tmpDir)
+
+	// File defining the target class
+	defFile := filepath.Join(tmpDir, "checker.rb")
+	os.WriteFile(defFile, []byte(`module Verification
+  module Matcher
+    class Checker
+    end
+  end
+end`), 0644)
+
+	// File referencing with partial qualifier inside Verification scope
+	refFile := filepath.Join(tmpDir, "runner.rb")
+	os.WriteFile(refFile, []byte(`module Verification
+  class Runner
+    def run
+      Matcher::Checker.new
+    end
+  end
+end`), 0644)
+
+	registry := parser.NewRegistry()
+	parser.RegisterDefaults(registry)
+	idx := New(tmpDir, registry)
+	idx.AddFile(defFile)
+	idx.AddFile(refFile)
+
+	// Partial qualifier "Matcher::Checker" from inside Verification (line 4, 1-indexed)
+	results := idx.FindDefinitionsInContext("Matcher::Checker", refFile, 4)
+	if len(results) != 1 || results[0].FullName != "Verification::Matcher::Checker" {
+		t.Errorf("expected Verification::Matcher::Checker, got %+v", results)
+	}
+
+	// Absolute lookup for ::Matcher::Checker should find nothing (no global Matcher::Checker)
+	results = idx.FindDefinitionsInContext("::Matcher::Checker", refFile, 4)
+	if len(results) != 0 {
+		t.Errorf("expected no results for absolute ::Matcher::Checker, got %+v", results)
+	}
+
+	// Unqualified "Checker" should still resolve via short name
+	results = idx.FindDefinitionsInContext("Checker", refFile, 4)
+	if len(results) != 1 || results[0].FullName != "Verification::Matcher::Checker" {
+		t.Errorf("expected Verification::Matcher::Checker via short name, got %+v", results)
+	}
+}
+
 func TestFindDefinitions_NestedModuleRelation(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "index-test-*")
 	defer os.RemoveAll(tmpDir)

@@ -194,6 +194,49 @@ end
 	}
 }
 
+func TestExtractWordAt_NamespacedClass(t *testing.T) {
+	tests := []struct {
+		name     string
+		line     string
+		char     int
+		expected string
+	}{
+		{
+			name:     "cursor on EinMatcher in EinLetter::EinMatcher.new",
+			line:     "    EinLetter::EinMatcher.new",
+			char:     18, // on 'E' of EinMatcher
+			expected: "EinLetter::EinMatcher",
+		},
+		{
+			name:     "cursor on EinLetter in EinLetter::EinMatcher",
+			line:     "    EinLetter::EinMatcher",
+			char:     6, // on 'e' of EinLetter
+			expected: "EinLetter",
+		},
+		{
+			name:     "leading :: preserved",
+			line:     "  ::TopLevel::Foo.call",
+			char:     16, // on 'o' of Foo
+			expected: "::TopLevel::Foo",
+		},
+		{
+			name:     "triple nested",
+			line:     "A::B::C.new",
+			char:     6, // on 'C'
+			expected: "A::B::C",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractWordAt(tt.line, 0, tt.char)
+			if result != tt.expected {
+				t.Errorf("extractWordAt(%q, 0, %d) = %q, want %q", tt.line, tt.char, result, tt.expected)
+			}
+		})
+	}
+}
+
 // itoa converts int to string (simple helper)
 func itoa(i int) string {
 	if i == 0 {

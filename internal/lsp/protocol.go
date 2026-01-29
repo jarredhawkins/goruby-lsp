@@ -204,7 +204,27 @@ func extractWordAt(content string, line, char int) string {
 		return ""
 	}
 
-	return lineText[start:end]
+	word := lineText[start:end]
+
+	// Expand leftward across :: separators to capture namespace qualifiers.
+	// e.g., cursor on "EinMatcher" in "EinLetter::EinMatcher" → "EinLetter::EinMatcher"
+	pos := start
+	for pos >= 2 && lineText[pos-1] == ':' && lineText[pos-2] == ':' {
+		// Check for another identifier before the ::
+		idEnd := pos - 2
+		idStart := idEnd
+		for idStart > 0 && isWordChar(lineText[idStart-1]) {
+			idStart--
+		}
+		if idStart == idEnd {
+			// No identifier before ::, this is a leading :: (absolute scope)
+			word = "::" + word
+			break
+		}
+		word = lineText[idStart:idEnd] + "::" + word
+		pos = idStart
+	}
+	return word
 }
 
 // isWordChar returns true if c is a valid Ruby identifier character

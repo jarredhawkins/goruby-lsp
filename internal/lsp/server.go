@@ -125,8 +125,8 @@ func (s *Server) handleDefinition(ctx context.Context, reply jsonrpc2.Replier, r
 		}
 	}
 
-	// Look up definitions in global index
-	symbols := s.index.FindDefinitionsInFile(word, filePath)
+	// Look up definitions in global index (namespace-aware)
+	symbols := s.index.FindDefinitionsInContext(word, filePath, line+1)
 	if len(symbols) == 0 {
 		return reply(ctx, nil, nil)
 	}
@@ -174,7 +174,9 @@ func (s *Server) handleReferences(ctx context.Context, reply jsonrpc2.Replier, r
 
 	// Find all references using trigram search
 	refs := s.index.FindReferences(word)
+	log.Printf("trigram search returned %d refs", len(refs))
 	for _, ref := range refs {
+		log.Printf("  ref: %s:%d:%d", ref.FilePath, ref.Line, ref.Column)
 		key := fmt.Sprintf("%s:%d:%d", ref.FilePath, ref.Line, ref.Column)
 		if _, exists := seen[key]; exists {
 			continue
@@ -197,7 +199,9 @@ func (s *Server) handleReferences(ctx context.Context, reply jsonrpc2.Replier, r
 
 	// Find symbols that target this name (e.g., relations targeting a class)
 	targetingRefs := s.index.FindTargetingSymbols(word)
+	log.Printf("targeting symbols returned %d refs", len(targetingRefs))
 	for _, sym := range targetingRefs {
+		log.Printf("  targeting: %s:%d:%d", sym.FilePath, sym.Line, sym.Column)
 		key := fmt.Sprintf("%s:%d:%d", sym.FilePath, sym.Line, sym.Column)
 		if _, exists := seen[key]; exists {
 			continue
@@ -209,7 +213,9 @@ func (s *Server) handleReferences(ctx context.Context, reply jsonrpc2.Replier, r
 	// Include declarations if requested - deduplication prevents double-adding
 	if params.Context.IncludeDeclaration {
 		symbols := s.index.FindDefinitions(word)
+		log.Printf("definitions returned %d symbols (includeDeclaration=%v)", len(symbols), params.Context.IncludeDeclaration)
 		for _, sym := range symbols {
+			log.Printf("  def: %s:%d:%d", sym.FilePath, sym.Line, sym.Column)
 			key := fmt.Sprintf("%s:%d:%d", sym.FilePath, sym.Line, sym.Column)
 			if _, exists := seen[key]; exists {
 				continue
@@ -219,6 +225,7 @@ func (s *Server) handleReferences(ctx context.Context, reply jsonrpc2.Replier, r
 		}
 	}
 
+	log.Printf("returning %d total locations", len(locations))
 	return reply(ctx, locations, nil)
 }
 

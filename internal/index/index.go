@@ -233,6 +233,39 @@ func (idx *Index) findDefinitionsLocked(name string) []*Symbol {
 	return nil
 }
 
+// FindDefinitionsInContext resolves a name using the enclosing scope at the given line.
+// It handles partially-qualified (Foo::Bar), absolutely-qualified (::Foo::Bar), and
+// unqualified names by prepending enclosing namespaces.
+func (idx *Index) FindDefinitionsInContext(name, filePath string, line int) []*Symbol {
+	// Absolute scope: strip leading :: and do exact lookup only
+	if strings.HasPrefix(name, "::") {
+		return idx.FindDefinitions(strings.TrimPrefix(name, "::"))
+	}
+
+	// If name contains ::, try namespace-aware resolution
+	if strings.Contains(name, "::") {
+		// Read file content to determine scope
+		content, err := os.ReadFile(filePath)
+		if err == nil {
+			scope := idx.scanner.ScopeAtLine(content, line)
+			// Try prepending enclosing namespaces, most specific first
+			for i := len(scope); i > 0; i-- {
+				candidate := strings.Join(scope[:i], "::") + "::" + name
+				if results := idx.FindDefinitions(candidate); len(results) > 0 {
+					return results
+				}
+			}
+		}
+		// Try bare qualified name
+		if results := idx.FindDefinitions(name); len(results) > 0 {
+			return results
+		}
+	}
+
+	// Unqualified or fallback: use existing logic with file preference
+	return idx.FindDefinitionsInFile(name, filePath)
+}
+
 // FindReferences finds all references to the given name using trigram search
 func (idx *Index) FindReferences(name string) []*Reference {
 	return idx.trigram.Search(name)
